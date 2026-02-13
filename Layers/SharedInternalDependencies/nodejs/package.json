@@ -1,0 +1,14 @@
+{
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "dependencies": {
+    "@aws-sdk/client-lambda": "^3.682.0",
+    "@aws-sdk/client-secrets-manager": "^3.774.0",
+    "contentful-management": "^11.31.1",
+    "jsforce": "^3.3.1",
+    "jsonwebtoken": "^9.0.2",
+    "pg": "^8.7.1",
+    "sequelize": "^6.12.5"
+  }
+}

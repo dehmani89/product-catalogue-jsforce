@@ -1,0 +1,277 @@
+# You can specify a custom docker image from Docker Hub as your build environment.
+image: atlassian/default-image:4
+
+
+pipelines:
+  branches: # Pipelines that will be triggered when a push is made in the below branch automatically
+
+    # This Branch will deploy to a QA environment. Notice the S3 Bucket and Stack Name
+    develop:
+      - step:
+          name: SonarQube Quality Gate and Deploy
+          script:
+            - unzip etc/sonar-scanner-cli-3.2.0.1227.zip
+            - chmod 777 sonar-scanner-3.2.0.1227/bin/sonar-scanner
+            - sonar-scanner-3.2.0.1227/bin/sonar-scanner -Dsonar.projectKey=product-catalogue-jsforce-lambda -Dsonar.host.url=https://sonar.aqd.com -Dsonar.login=$SONAR_LOGIN
+
+            # Wait for SonarQube Quality Gate to complete and get the status
+            - QUALITY_GATE_STATUS=`curl -u $SONAR_CURL_LOGIN "https://sonar.aqd.com/api/qualitygates/project_status?projectKey=product-catalogue-jsforce-lambda" | jq '.projectStatus.status' | tr -d '"'`
+
+            - echo "QUALITY_GATE_STATUS::" $QUALITY_GATE_STATUS;
+
+            # If Quality Gate fails, stop the pipeline
+            - if [ $QUALITY_GATE_STATUS != "OK" ]; then echo "SonarQube Quality Gate failed. Stopping the pipeline."; exit 1; fi
+            - if [ $QUALITY_GATE_STATUS = "OK" ]; then echo "SonarQube Quality Gate passed."; exit 0; fi
+
+      - step:
+          name: QA - Create/Update Lambda code for QA environment
+          deployment: qa
+          script:
+            - pipe: atlassian/aws-sam-deploy:1.5.0
+              variables:
+                #This is the S3 bucket name that will be used (must already exist)
+                S3_BUCKET: "product-catalogue-jsforce-s3-qa"
+                #This is the API Gateway and Cloud Formation name that will be created/updated
+                STACK_NAME: "product-catalogue-jsforce-stack-qa"
+                #This is the template to be used for this environment
+                SAM_TEMPLATE: 'template.yaml'
+                COMMAND: 'all'
+                CAPABILITIES: [ "CAPABILITY_IAM", "CAPABILITY_AUTO_EXPAND" ]
+                WAIT: 'true'
+                WAIT_INTERVAL: 30
+                STACK_PARAMETERS: >
+                  [
+                    {
+                      "ParameterKey": "StackEnv",
+                      "ParameterValue": "qa"
+                    },
+                    {
+                      "ParameterKey": "dbUserName",
+                      "ParameterValue": ${DB_USER_NAME}
+                    },
+                    {
+                      "ParameterKey": "dbPassword",
+                      "ParameterValue": ${DB_PASSWORD}
+                    },
+                    {
+                      "ParameterKey": "dbHost",
+                      "ParameterValue": ${DB_HOST}
+                    },
+                    {
+                      "ParameterKey": "dbName",
+                      "ParameterValue": ${DB_NAME}
+                    },
+                    {
+                      "ParameterKey": "sfURL",
+                      "ParameterValue": ${SF_URL}
+                    },
+                    {
+                      "ParameterKey": "sfUserName",
+                      "ParameterValue": ${SF_USERNAME}
+                    },
+                    {
+                      "ParameterKey": "sfClientID",
+                      "ParameterValue": ${SF_CLIENT_ID}
+                    },
+                    {
+                      "ParameterKey": "OktaEnv",
+                      "ParameterValue": ${OKTA_AUTH_SERVER}
+                    },
+                    {
+                      "ParameterKey": "contentfulCmaToken",
+                      "ParameterValue": ${CONTENTFUL_CMA_TOKEN}
+                    },                    
+                    {
+                      "ParameterKey": "contentfulCdaToken",
+                      "ParameterValue": ${CONTENTFUL_CDA_TOKEN}
+                    },
+                    {
+                      "ParameterKey": "contentfulPreviewToken",
+                      "ParameterValue": ${CONTENTFUL_PREVIEW_TOKEN}
+                    },                    
+                    {
+                      "ParameterKey": "contentfulEnvironmentId",
+                      "ParameterValue": ${CONTENTFUL_ENVIRONMENT_ID}
+                    },
+                    {
+                      "ParameterKey": "contentfulContentTypeId",
+                      "ParameterValue": ${CONTENTFUL_TYPE_ID}
+                    },
+                    {
+                      "ParameterKey": "contentfulSpaceId",
+                      "ParameterValue": ${CONTENTFUL_SPACE_ID}
+                    }         
+                  ]
+                AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID}
+                AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY}
+                AWS_DEFAULT_REGION: ${AWS_DEFAULT_REGION}
+
+    # This Branch will deploy to a Staging environment. Notice the S3 Bucket and Stack Name
+    master:
+      - step:
+          name: Staging - Create/Update Lambda code for Staging environment
+          deployment: staging
+          script:
+            - pipe: atlassian/aws-sam-deploy:1.5.0
+              variables:
+                #This is the S3 bucket name that will be used (must already exist)
+                S3_BUCKET: "product-catalogue-jsforce-s3-staging"
+                #This is the API Gateway and Cloud Formation name that will be created/updated
+                STACK_NAME: "product-catalogue-jsforce-stack-staging"
+                #This is the template to be used for this environment
+                SAM_TEMPLATE: 'template.yaml'
+                COMMAND: 'all'
+                CAPABILITIES: [ "CAPABILITY_IAM", "CAPABILITY_AUTO_EXPAND" ]
+                WAIT: 'true'
+                WAIT_INTERVAL: 30
+                STACK_PARAMETERS: >
+                  [
+                    {
+                      "ParameterKey": "StackEnv",
+                      "ParameterValue": "staging"
+                    },
+                    {
+                      "ParameterKey": "dbUserName",
+                      "ParameterValue": ${DB_USER_NAME}
+                    },
+                    {
+                      "ParameterKey": "dbPassword",
+                      "ParameterValue": ${DB_PASSWORD}
+                    },
+                    {
+                      "ParameterKey": "dbHost",
+                      "ParameterValue": ${DB_HOST}
+                    },
+                    {
+                      "ParameterKey": "dbName",
+                      "ParameterValue": ${DB_NAME}
+                    },
+                    {
+                      "ParameterKey": "sfURL",
+                      "ParameterValue": ${SF_URL}
+                    },
+                    {
+                      "ParameterKey": "sfUserName",
+                      "ParameterValue": ${SF_USERNAME}
+                    },
+                    {
+                      "ParameterKey": "sfClientID",
+                      "ParameterValue": ${SF_CLIENT_ID}
+                    },
+                    {
+                      "ParameterKey": "OktaEnv",
+                      "ParameterValue": ${OKTA_AUTH_SERVER}
+                    },
+                    {
+                      "ParameterKey": "contentfulCmaToken",
+                      "ParameterValue": ${CONTENTFUL_CMA_TOKEN}
+                    },                    {
+                      "ParameterKey": "contentfulCdaToken",
+                      "ParameterValue": ${CONTENTFUL_CDA_TOKEN}
+                    },
+                    {
+                      "ParameterKey": "contentfulPreviewToken",
+                      "ParameterValue": ${CONTENTFUL_PREVIEW_TOKEN}
+                    },                  
+                    {
+                      "ParameterKey": "contentfulEnvironmentId",
+                      "ParameterValue": ${CONTENTFUL_ENVIRONMENT_ID}
+                    },
+                    {
+                      "ParameterKey": "contentfulContentTypeId",
+                      "ParameterValue": ${CONTENTFUL_TYPE_ID}
+                    },
+                    {
+                      "ParameterKey": "contentfulSpaceId",
+                      "ParameterValue": ${CONTENTFUL_SPACE_ID}
+                    }
+                  ]
+                AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID}
+                AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY}
+                AWS_DEFAULT_REGION: ${AWS_DEFAULT_REGION}
+
+  #Pipeline that only runs after we tag a Coomit that we want to move to Production
+  tags:
+    v*:
+      - step:
+          name: PROD - Create/Update Lambda code for PROD environment
+          deployment: prod
+          script:
+            - pipe: atlassian/aws-sam-deploy:1.5.0
+              variables:
+                #This is the S3 bucket name that will be used (must already exist)
+                S3_BUCKET: "product-catalogue-jsforce-s3-prod"
+                #This is the API Gateway and Cloud Formation name that will be created/updated
+                STACK_NAME: "product-catalogue-jsforce-stack-prod"
+                #This is the template to be used for this environment
+                SAM_TEMPLATE: 'template.yaml'
+                COMMAND: 'all'
+                CAPABILITIES: [ "CAPABILITY_IAM", "CAPABILITY_AUTO_EXPAND" ]
+                WAIT: 'true'
+                WAIT_INTERVAL: 30
+                STACK_PARAMETERS: >
+                  [
+                    {
+                      "ParameterKey": "StackEnv",
+                      "ParameterValue": "prod"
+                    },
+                    {
+                      "ParameterKey": "dbUserName",
+                      "ParameterValue": ${DB_USER_NAME}
+                    },
+                    {
+                      "ParameterKey": "dbPassword",
+                      "ParameterValue": ${DB_PASSWORD}
+                    },
+                    {
+                      "ParameterKey": "dbHost",
+                      "ParameterValue": ${DB_HOST}
+                    },
+                    {
+                      "ParameterKey": "dbName",
+                      "ParameterValue": ${DB_NAME}
+                    },
+                    {
+                      "ParameterKey": "sfURL",
+                      "ParameterValue": ${SF_URL}
+                    },
+                    {
+                      "ParameterKey": "sfUserName",
+                      "ParameterValue": ${SF_USERNAME}
+                    },
+                    {
+                      "ParameterKey": "sfClientID",
+                      "ParameterValue": ${SF_CLIENT_ID}
+                    },
+                    {
+                      "ParameterKey": "OktaEnv",
+                      "ParameterValue": ${OKTA_AUTH_SERVER}
+                    },
+                    {
+                      "ParameterKey": "contentfulCmaToken",
+                      "ParameterValue": ${CONTENTFUL_CMA_TOKEN}
+                    },                    
+                    {
+                      "ParameterKey": "contentfulCdaToken",
+                      "ParameterValue": ${CONTENTFUL_CDA_TOKEN}
+                    },
+                    {
+                      "ParameterKey": "contentfulPreviewToken",
+                      "ParameterValue": ${CONTENTFUL_PREVIEW_TOKEN}
+                    },                  
+                    {
+                      "ParameterKey": "contentfulEnvironmentId",
+                      "ParameterValue": ${CONTENTFUL_ENVIRONMENT_ID}
+                    },
+                    {
+                      "ParameterKey": "contentfulContentTypeId",
+                      "ParameterValue": ${CONTENTFUL_TYPE_ID}
+                    },
+                    {
+                      "ParameterKey": "contentfulSpaceId",
+                      "ParameterValue": ${CONTENTFUL_SPACE_ID}
+                    }
+                  ]
+                AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID}
+                AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY}
+                AWS_DEFAULT_REGION: ${AWS_DEFAULT_REGION}

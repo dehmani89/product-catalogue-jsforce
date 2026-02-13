@@ -1,0 +1,217 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Transform: AWS::Serverless-2016-10-31
+Description: Collection of Lambda functions to support the product-catalogue-jsforce Project with an API Gateway.
+
+#########################################################
+#    Below Globals that apply to all Lambda Functions
+#########################################################
+Globals:
+  Function:
+    Runtime: nodejs22.x
+    Tracing: Active
+    #This is the method Name that will be Executed
+    Handler: index.handler
+    #This is the Layer Name that will be added to each lambda function
+    Layers:
+      - !Ref ProductCatalogueDependenciesLayer
+    #    VpcConfig:
+    #      SubnetIds: [ subnet-42c62a1b, subnet-7cf09346, subnet-ddcdc1f5, subnet-14d31163 ]
+    #      SecurityGroupIds: [ sg-31bd6c4a ]
+    #Environment variables for all functions
+    Environment:
+
+      Variables:
+        ENV: !Sub ${StackEnv}
+        REGION: !Sub ${AWS::Region}
+        DB_USER_NAME: !Sub ${dbUserName}
+        DB_PASSWORD: !Sub ${dbPassword}
+        DB_HOST: !Sub ${dbHost}
+        DB_NAME: !Sub ${dbName}
+        SF_URL: !Sub ${sfURL}
+        SF_USERNAME: !Sub ${sfUserName}
+        SF_CLIENT_ID: !Sub ${sfClientID}
+        CONTENTFUL_CMA_TOKEN: !Sub ${contentfulCmaToken}
+        CONTENTFUL_CDA_TOKEN: !Sub ${contentfulCdaToken}
+        CONTENTFUL_PREVIEW_TOKEN: !Sub ${contentfulPreviewToken}
+        CONTENTFUL_ENVIRONMENT_ID: !Sub ${contentfulEnvironmentId}
+        CONTENTFUL_TYPE_ID: !Sub ${contentfulContentTypeId}
+        CONTENTFUL_SPACE_ID: !Sub ${contentfulSpaceId}
+
+    MemorySize: 512
+    Timeout: 20
+    #The number of simultaneous executions to reserve for the function.
+#    ReservedConcurrentExecutions: 100
+
+Parameters:
+  StackEnv:
+    Description: 'Specifies which env. settings to use'
+    Type: String
+
+  dbUserName:
+    Description: 'Specifies which DB_USER_NAME to use [bitbucket]'
+    Type: String
+
+  dbPassword:
+    Description: 'Specifies which DB_PASSWORD to use [bitbucket]'
+    Type: String
+    NoEcho: true  # hides the string value from console and shows (*******)
+
+  dbHost:
+    Description: 'Specifies which DB_HOST to use [bitbucket]'
+    Type: String
+
+  dbName:
+    Description: 'Specifies which DB_NAME to use [bitbucket]'
+    Type: String
+
+  sfURL:
+    Description: 'Specifies which SFDC URL to use [bitbucket]'
+    Type: String
+
+  sfUserName:
+    Description: 'Specifies which SFDC username to use [bitbucket]'
+    Type: String
+
+  sfClientID:
+    Description: 'Specifies which SFDC client ID to use [bitbucket]'
+    Type: String
+
+  contentfulCmaToken:
+    Description: 'Specifies CMA token to connect to Contentful'
+    Type: String
+
+  contentfulCdaToken:
+    Description: 'Specifies CDA token to connect to Contentful'
+    Type: String
+
+  contentfulPreviewToken:
+    Description: 'Specifies Preview token to connect to Contentful'
+    Type: String
+
+  contentfulEnvironmentId:
+    Description: 'Specifies environment id to Contentful'
+    Type: String
+
+  contentfulContentTypeId:
+    Description: 'Specifies contentType id to Contentful'
+    Type: String
+
+  contentfulSpaceId:
+    Description: 'Specifies space id to Contentful'
+    Type: String
+
+  OktaEnv:
+    Description: "Specifies which OKTA env. settings to use"
+    Type: String
+
+  Role:
+    Description: 'Lambda execution Role. Default value is good for all envs'
+    Type: 'String'
+    Default: 'arn:aws:iam::831336116982:role/my-service-dev-us-east-1-lambdaRole'
+
+Resources:
+  #Configure the dependencies layer to be generated as part of the SAM Build
+  ProductCatalogueDependenciesLayer:
+    Type: AWS::Serverless::LayerVersion
+    Properties:
+      LayerName: !Sub product-catalogue-dependencies-layer-${StackEnv}
+      Description: Dependencies for product-catalogue app
+      ContentUri: Layers/SharedInternalDependencies/
+      CompatibleRuntimes:
+        - nodejs18.x
+      RetentionPolicy: Retain
+    Metadata:
+      BuildMethod: nodejs18.x
+
+  #Configure API Gateway based on Environment
+  MyHttpApi:
+    Type: AWS::Serverless::HttpApi
+    Properties:
+      StageName: !Ref StackEnv
+      FailOnWarnings: true
+      CorsConfiguration:
+        AllowMethods:
+          - GET
+          - PUT
+          - POST
+        AllowHeaders:
+          - "*"
+        AllowOrigins:
+          - "http://*"
+          - "https://*"
+      Auth:
+        DefaultAuthorizer: OAuth2
+        Authorizers:
+          OAuth2:
+            AuthorizationScopes:
+              - profile
+              - email
+              - JWT-Read
+            JwtConfiguration:
+              issuer: !Ref OktaEnv
+              audience:
+                - all
+            IdentitySource: "$request.header.Authorization"
+
+
+  #######################################################################################################################
+  #                     Define SalesForce APIS below
+  #######################################################################################################################
+  #ApcConfirmedOrders Lambda Function
+  ApcConfirmedOrders:
+    Type: AWS::Serverless::Function
+    Properties:
+      #This is the Lambda Function Name that will be displayed in AWS Console
+      FunctionName: !Sub ApcConfirmedOrders-${StackEnv}
+      CodeUri: Lambdas/Salesforce/ApcConfirmedOrders
+      Role: !Ref Role
+      Events:
+        ApiEventGET:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref MyHttpApi
+            Path: '/confirmedOrders'
+            Method: GET
+
+  #######################################################################################################################
+  #                     Define PostgresSQL APIS below
+  #######################################################################################################################
+
+  #ApcFilteredSchoolListForAgency Lambda Function
+  ApcFilteredSchoolListForAgency:
+    Type: AWS::Serverless::Function
+    Properties:
+      #This is the Lambda Function Name that will be displayed in AWS Console
+      FunctionName: !Sub ApcFilteredSchoolListForAgency-${StackEnv}
+      CodeUri: Lambdas/Postgresql/ApcFilteredSchoolListForAgency
+      Role: !Ref Role
+      VpcConfig:
+        SubnetIds: [ subnet-23443234, subnet-234234234, subnet-23423423, subnet-234234423 ]
+        SecurityGroupIds: [ sg-35345435 ]
+      Events:
+        ApiEventPOST:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref MyHttpApi
+            Path: '/agencySchoolList'
+            Method: POST
+
+  #######################################################################################################################
+  ##Salesforce to Contentful Sync
+  #######################################################################################################################
+
+  #ApcSyncHubsite Lambda Function
+  ApcSyncHubsite:
+    Type: AWS::Serverless::Function
+    Properties:
+      #This is the Lambda Function Name that will be displayed in AWS Console
+      FunctionName: !Sub ApcSyncHubsite-${StackEnv}
+      CodeUri: Lambdas/Contentful/ApcSyncHubsite
+      Role: !Ref Role
+      Events:
+        ApiEventPOST:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref MyHttpApi
+            Path: '/ApcSyncHubsite'
+            Method: POST
