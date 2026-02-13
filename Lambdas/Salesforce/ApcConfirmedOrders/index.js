@@ -17,12 +17,31 @@ exports.handler = async (event) => {
         const conn = await connectToSalesForce();
 
         try {
-             const confirmedOrders = await conn.query(
-               'SELECT id, CreatedDate, name, Net_Amount__c, Adjusted_Net_Amount__c, Payment_Due_Date__c, Product__r.name, Invoice_Item_Status__c, Product__r.Is_Affiliate_Product__c, Sales_Order_Item__r.Adjustment_Reason__c, Invoice_Item_Type__c, Split_Invoice__c' + ' ' +
-                 'FROM Customer_Invoice_Item__c ' +
-                 "WHERE Customer__r.ID = '" + id + "'" +
-                 "AND Invoice_Item_Type__c != 'Installment'"
-             );
+
+            const confirmedOrders = await conn.query(`
+                  SELECT
+                    r.id,
+                    r.created_date,
+                    r.record_name,
+                    r.amount_value,
+                    r.adjusted_amount_value,
+                    r.due_date,
+                    related_a.name AS related_a_name,
+                    r.status_code,
+                    related_a.is_flagged,
+                    related_b.reason_code,
+                    r.record_type,
+                    r.is_split
+                  FROM Main_Record r
+                  LEFT JOIN Related_Object_A related_a
+                    ON r.related_a_id = related_a.id
+                  LEFT JOIN Related_Object_B related_b
+                    ON r.related_b_id = related_b.id
+                  WHERE r.parent_id = $1
+                    AND r.record_type <> $2
+                  `,
+                [id, 'TypeA']
+            );
 
             // remove the [attributes] attribute inside each record's, Sales_Order_Item__r and Product__r objects
             let finalConfirmedOrders = confirmedOrders?.records.map(item => {
