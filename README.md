@@ -192,6 +192,8 @@ If you need to create a new API follow the below steps:
 
 AQD Engineering
 
+if you have any questions about this project, what it does, or how to set it up, please reach out to me via email and I can help.
+
 <p align="right">(<a href="#top">back to top</a>)</p>
 
 <!-- ACKNOWLEDGMENTS -->
